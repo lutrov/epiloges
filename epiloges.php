@@ -110,35 +110,36 @@ function epiloges_process() {
 	printf("<p>Options names are determined by the plugin author. Some are obvious, but some make no sense. You maye have to do a little detective work to figure out where an option came from. Deactivate this plugin when you are not using it in order to save memory and speed up your site loading time.</p>\n");
 	printf("</div>\n");
 	$ptab = $wpdb->options;
-	$nonce = null;
-	if (array_key_exists('epiloges_nonce', $_POST)) {
-		$nonce = $_POST['epiloges_nonce'];
-	}
-	if (strlen($nonce) > 0 && wp_verify_nonce($nonce, 'epiloges_static_update')) {
-		if (array_key_exists('epiloges_autoload', $_POST)) {
-			$autoload = $_POST['epiloges_autoload'];
-			printf("<ul>");
-			foreach ($autoload as $name) {
-				$au = substr($name, 0, strpos($name,'_'));
-				$name = substr($name, strpos($name,'_') + 1);
-				printf("<li>Changing <em>%s</em> autoload to <em>%s</em></li>", $name, $au);
-				$sql = "UPDATE $ptab SET autoload='$au' WHERE option_name='$name'";
-				$wpdb->query($sql);
+	if (array_key_exists('epiloges_token', $_POST)) {
+		$nonce = $_POST['epiloges_token'];
+		if (strlen($nonce) > 0 && wp_verify_nonce($nonce, 'epiloges_token')) {
+			if (array_key_exists('epiloges_autoload', $_POST)) {
+				$autoload = $_POST['epiloges_autoload'];
+				printf("<ul>");
+				foreach ($autoload as $name) {
+					$au = substr($name, 0, strpos($name,'_'));
+					$name = substr($name, strpos($name,'_') + 1);
+					printf("<li>Changing <em>%s</em> autoload to <em>%s</em></li>", $name, $au);
+					$sql = "UPDATE $ptab SET autoload='$au' WHERE option_name='$name'";
+					$wpdb->query($sql);
+				}
+				printf("</ul>\n");
 			}
-			printf("</ul>\n");
-		}
-		if (array_key_exists('epiloges_delete', $_POST)) {
-			$delete = $_POST['epiloges_delete'];
-			printf("<ul>");
-			foreach ($delete as $name) {
-				printf("<li>Deleting <em>%s</em></li>", $name);
-				$sql = "DELETE FROM $ptab WHERE option_name='$name'";
-				$wpdb->query($sql);
+			if (array_key_exists('epiloges_delete', $_POST)) {
+				$delete = $_POST['epiloges_delete'];
+				printf("<ul>");
+				foreach ($delete as $name) {
+					printf("<li>Deleting <em>%s</em></li>", $name);
+					$sql = "DELETE FROM $ptab WHERE option_name='$name'";
+					$wpdb->query($sql);
+				}
+				printf("</ul>\n");
 			}
-			printf("</ul>\n");
+		} else {
+			die('Failed nonce security check.');
 		}
-
 	}
+	$nonce = wp_create_nonce('epiloges_token');
 	$system_options = array(
 		'_transient_',
 		'active_plugins',
@@ -309,10 +310,8 @@ function epiloges_process() {
 		}
 	}
 	$count = count($rows);
-	$nonce = wp_create_nonce('epiloges_static_update');
 	printf("<p><strong>Options marked in <span class=\"red\">red</span> have been identified as currently used by an installed plugin or theme and cannot be deleted.</strong></p>\n");
 	printf("<form method=\"post\" name=\"epiloges\" action=\"\">\n");
-	printf("<input type=\"hidden\" name=\"epiloges_nonce\" value=\"%s\" />\n", $nonce);
 	printf("<p>There were %s options found.</p>\n", $count);
 	printf("<table class=\"widefat\">\n");
 	printf("<thead>\n");
@@ -351,18 +350,19 @@ function epiloges_process() {
 		}
 		printf("<td class=\"num\"><span title=\"%s\">%s</span></td>", $value, $size);
 		printf("<td class=\"num\">%s</td>", $autoload);
-		printf("<td class=\"\"><span class=\"change\"><input type=\"checkbox\" value=\"%s_%s\" name=\"epiloges_autoload[]\" />&nbsp;%s</span></td>", $au, $option, $au);
+		printf("<td class=\"\"><span class=\"change\"><input type=\"checkbox\" value=\"%s_%s\" name=\"epiloges_autoload[]\">&nbsp;%s</span></td>", $au, $option, $au);
 		if (strlen($path) > 0 || substr($option, 0, strlen($id) + 1) == $used . '_') {
 			printf("<td class=\"num\">&nbsp;</td>");
 		} else {
-			printf("<td class=\"num\"><input type=\"checkbox\" value=\"%s\" name=\"epiloges_delete[]\" /></td>", $option);
+			printf("<td class=\"num\"><input type=\"checkbox\" value=\"%s\" name=\"epiloges_delete[]\"></td>", $option);
 		}
 		printf("</tr>\n");
 		$class = strlen($class) > 0 ? null : 'alternate';
 	}
 	printf("</tbody>\n");
 	printf("</table>\n");
-	printf("<p class=\"submit\"><input class=\"button-primary\" value=\"Save Changes\" type=\"submit\" onclick=\"return confirm('Are you sure? There is no undo for this.');\" /></p>\n");
+	printf("<p class=\"submit\"><input class=\"button-primary\" value=\"Save Changes\" type=\"submit\" onclick=\"return confirm('Are you sure? There is no undo for this.');\"></p>\n");
+	printf("<input type=\"hidden\" name=\"epiloges_token\" value=\"%s\">\n", $nonce);
 	printf("</form>\n");
 	$info = null;
 	$c = 0;
