@@ -2,20 +2,13 @@
 
 /*
 Plugin Name: Epiloges
-Description: Optimises the Wordpress <em>options</em> table by allowing you to change plugin options so that they don't autoload and by allowing you to delete any orphaned options left behind by plugins and theme frameworks. Why this plugin name? Epiloges means "options" in Greek.
+Description: Optimises the Wordpress <em>options</em> table by allowing you to change plugin options so that they don't autoload and by allowing you to delete any orphaned options left behind by plugins and theme frameworks. Based on the work of <a href="http://blogseye.com">Keith P. Graham</a>. Why this plugin name? Epiloges means "options" in Greek.
 Author: Ivan Lutrov
-Version: 1.8
 Author URI: http://lutrov.com
+Version: 2.0
 */
 
 defined('ABSPATH') || die('Ahem.');
-
-//
-// This plugin is only while in the admin dashboard.
-//
-if (is_admin() == false) {
-	return;
-}
 
 //
 // Set max execution time to 3 minutes.
@@ -26,10 +19,10 @@ ini_set('max_execution_time', 180);
 // Get recursive list of PHP files in specified directory.
 //
 function epiloges_recursive_directory($folder, &$array) {
-	$handle = opendir($folder);
-	while ($file = readdir($handle)) {
-		if ($file !== '.' && $file !== '..') {
-			$path = $folder . '/' . $file;
+	$fp = opendir($folder);
+	while ($file = readdir($fp)) {
+		if ($file <> '.' && $file <> '..') {
+			$path = sprintf('%s/%s', $folder, $file);
 			if (is_dir($path)) {
 				epiloges_recursive_directory($path, $array);
 			} else {
@@ -39,7 +32,7 @@ function epiloges_recursive_directory($folder, &$array) {
 			}
 		}
 	}
-	closedir($handle);
+	closedir($fp);
 	return $array;
 }
 
@@ -52,24 +45,26 @@ function epiloges_plugin_options() {
 	$path = str_replace('\\', '/', dirname(dirname(dirname(__FILE__))));
 	$list = epiloges_recursive_directory($path, $list);
 	foreach ($list as $path) {
-		$handle = fopen($path, 'r');
-		$filesize = filesize($path);
-		if ($filesize > 0) {
-			$contents = fread($handle, $filesize);
-			preg_match_all('#get_option\((.+)\)#', $contents, $matches);
-			if (isset($matches[1])) {
-				foreach ($matches[1] as $value) {
-					$value = strtok($value, ')');
-					$value = strtok($value, ',');
-					$value = trim($value);
-					if (substr($value, 0, 1) == "'") {
-						$value = substr(substr($value, 1), 0, -1);
+		if (($fp = fopen($path, 'r'))) {
+			$filesize = filesize($path);
+			if ($filesize > 0) {
+				$content = fread($fp, $filesize);
+				$matches = array();
+				preg_match_all('#get_option\((.+)\)#', $content, $matches);
+				if (isset($matches[1])) {
+					foreach ($matches[1] as $value) {
+						$value = strtok($value, ')');
+						$value = strtok($value, ',');
+						$value = trim($value);
+						if (substr($value, 0, 1) == "'") {
+							$value = substr(substr($value, 1), 0, -1);
+						}
+						$options[$value] = $path;
 					}
-					$options[$value] = $path;
 				}
 			}
+			fclose($fp);
 		}
-		fclose($handle);
 	}
 	return $options;
 }
@@ -80,11 +75,11 @@ function epiloges_plugin_options() {
 function epiloges_human_friendly_size($value, $precision = 1) {
 	$result = null;
 	if (($value / 1024) < 1) {
-		$result = $value . 'B';
+		$result = sprintf('%sB', $value);
 	} elseif (($value / 1024 / 1024) < 1) {
-		$result = number_format($value / 1024, $precision) . 'K';
+		$result = sprintf('%sK', number_format($value / 1024, $precision));
 	} else {
-		$result = number_format($value / 1024 / 1024, $precision) . 'M';
+		$result = sprintf('%sM', number_format($value / 1024 / 1024, $precision));
 	}
 	return $result;
 }
@@ -97,49 +92,47 @@ function epiloges_process() {
 	if (current_user_can('manage_options') == false) {
 		die('Access denied.');
 	}
-	printf("<div id=\"epiloges\" class=\"wrap\">\n");
-	printf("<h1>Epiloges</h1>\n");
-	printf("<p>Epiloges is installed and working correctly. <a href=\"#\" id=\"epiloges-help-toggle\">Help</a></p>\n");
-	printf("<div id=\"epiloges-help\">\n");
-	printf("<p>In Wordpress, some options are loaded whenever Wordpress loads a page. These are marked as autoload options. This is done to speed up Wordpress and prevent the programs from hitting the database every time some plugin needs to look up an option. Automatic loading of options at start-up makes Wordpress fast, but it can also use up memory for options that will seldom or never be used.</p>\n");
-	printf("<p>You can safely switch options so that they don't load automatically. Probably the worst thing that will happen is that the page will paint a little slower because the option is retrieved separately from other options. The best thing that can happen is there is a lower demand on memory because the unused options are not loaded when Wordpress starts loading a page.</p>\n");
-	printf("<p>When plugins are uninstalled they are supposed to clean up their options. Many options do not do any clean-up during uninstall. It is quite possible that you have many orphan options from plugins that you deleted long ago. These are autoloaded on every page, slowing down your pages and eating up memory. These options can be safely marked so that they will not autoload. If you are sure they are not needed you can delete them.</p>\n");
-	printf("<p>You can change the autoload settings or delete an option on the form below. Be aware that you can break some plugins by deleting their options. I do not show most of the built-in options used by Wordpress. The list below should be just plugin options.</p>\n");
-	printf("<p>It is far safer to change the autoload option value to \"no\" than to delete an option. Only delete an option if you are sure that it is from an uninstalled plugin. If you find your pages slowing down, turn the autoload option back to \"on\".</p>\n");
-	printf("<p>In order to see if the change in autoload makes any difference, you can view the source of your blog pages and look for an html comment that shows your current memory usage and the load time and number of queries for the page. This is added to the footer by this plugin. It is a HTML comment so you have to view the page source to see it.</p>\n");
-	printf("<p>Options names are determined by the plugin author. Some are obvious, but some make no sense. You maye have to do a little detective work to figure out where an option came from. Deactivate this plugin when you are not using it in order to save memory and speed up your site loading time.</p>\n");
-	printf("</div>\n");
-	$ptab = $wpdb->options;
-	if (array_key_exists('epiloges_token', $_POST)) {
-		$nonce = $_POST['epiloges_token'];
-		if (strlen($nonce) > 0 && wp_verify_nonce($nonce, 'epiloges_token')) {
-			if (array_key_exists('epiloges_autoload', $_POST)) {
-				$autoload = $_POST['epiloges_autoload'];
-				printf("<ul>");
-				foreach ($autoload as $name) {
-					$au = substr($name, 0, strpos($name,'_'));
-					$name = substr($name, strpos($name,'_') + 1);
-					printf("<li>Changing <em>%s</em> autoload to <em>%s</em></li>", $name, $au);
-					$sql = "UPDATE $ptab SET autoload='$au' WHERE option_name='$name'";
-					$wpdb->query($sql);
-				}
-				printf("</ul>\n");
-			}
-			if (array_key_exists('epiloges_delete', $_POST)) {
-				$delete = $_POST['epiloges_delete'];
-				printf("<ul>");
-				foreach ($delete as $name) {
-					printf("<li>Deleting <em>%s</em></li>", $name);
-					$sql = "DELETE FROM $ptab WHERE option_name='$name'";
-					$wpdb->query($sql);
-				}
-				printf("</ul>\n");
-			}
-		} else {
-			die('Failed nonce security check.');
-		}
+	echo sprintf("<div id=\"epiloges\" class=\"wrap\">\n");
+	echo sprintf("<h2>Epiloges</h2>\n");
+	echo sprintf("<p>Epiloges is installed and working correctly. <a href=\"#\" id=\"epiloges-help-toggle\">Help</a></p>\n");
+	echo sprintf("<div id=\"epiloges-help\">\n");
+	echo sprintf("<p>In Wordpress, some options are loaded whenever Wordpress loads a page. These are marked as autoload options. This is done to speed up Wordpress and prevent the programs from hitting the database every time some plugin needs to look up an option. Automatic loading of options at start-up makes Wordpress fast, but it can also use up memory for options that will seldom or never be used.</p>\n");
+	echo sprintf("<p>You can safely switch options so that they don't load automatically. Probably the worst thing that will happen is that the page will paint a little slower because the option is retrieved separately from other options. The best thing that can happen is there is a lower demand on memory because the unused options are not loaded when Wordpress starts loading a page.</p>\n");
+	echo sprintf("<p>When plugins are uninstalled they are supposed to clean up their options. Many options do not do any clean-up during uninstall. It is quite possible that you have many orphan options from plugins that you deleted long ago. These are autoloaded on every page, slowing down your pages and eating up memory. These options can be safely marked so that they will not autoload. If you are sure they are not needed you can delete them.</p>\n");
+	echo sprintf("<p>You can change the autoload settings or delete an option on the form below. Be aware that you can break some plugins by deleting their options. I do not show most of the built-in options used by Wordpress. The list below should be just plugin options.</p>\n");
+	echo sprintf("<p>It is far safer to change the autoload option value to \"no\" than to delete an option. Only delete an option if you are sure that it is from an uninstalled plugin. If you find your pages slowing down, turn the autoload option back to \"on\".</p>\n");
+	echo sprintf("<p>In order to see if the change in autoload makes any difference, you can view the source of your blog pages and look for an html comment that shows your current memory usage and the load time and number of queries for the page. This is added to the footer by this plugin. It is a HTML comment so you have to view the page source to see it.</p>\n");
+	echo sprintf("<p>Options names are determined by the plugin author. Some are obvious, but some make no sense. You maye have to do a little detective work to figure out where an option came from. Deactivate this plugin when you are not using it in order to save memory and speed up your site loading time.</p>\n");
+	echo sprintf("</div>\n");
+	$nonce = null;
+	if (array_key_exists('epiloges_nonce', $_POST)) {
+		$nonce = $_POST['epiloges_nonce'];
 	}
-	$nonce = wp_create_nonce('epiloges_token');
+	if (strlen($nonce) > 0 && wp_verify_nonce($nonce, 'epiloges_static_update')) {
+		if (array_key_exists('epiloges_autoload', $_POST)) {
+			$autoload = $_POST['epiloges_autoload'];
+			echo sprintf("<ul>");
+			foreach ($autoload as $name) {
+				$au = substr($name, 0, strpos($name,'_'));
+				$name = substr($name, strpos($name,'_') + 1);
+				echo sprintf("<li>Changing <em>%s</em> autoload to <em>%s</em></li>", $name, $au);
+				$query = sprintf("UPDATE %s SET autoload = '%s' WHERE option_name = '%s'", $wpdb->options, $au, $name);
+				$wpdb->query($query);
+			}
+			echo sprintf("</ul>\n");
+		}
+		if (array_key_exists('epiloges_delete', $_POST)) {
+			$delete = $_POST['epiloges_delete'];
+			echo sprintf("<ul>");
+			foreach ($delete as $name) {
+				echo sprintf("<li>Deleting <em>%s</em></li>", $name);
+				$query = sprintf("DELETE FROM %s WHERE option_name = '%s'", $wpdb->options, $name);
+				$wpdb->query($query);
+			}
+			echo sprintf("</ul>\n");
+		}
+
+	}
 	$system_options = array(
 		'_transient_',
 		'active_plugins',
@@ -275,7 +268,6 @@ function epiloges_process() {
 		'wordpress_api_key',
 	);
 	$plugin_options = epiloges_plugin_options();
-	$ptab = $wpdb->options;
 	$orderby = 'autoload, option_name';
 	if (array_key_exists('orderby', $_GET)) {
 		switch ($_GET['orderby']) {
@@ -290,14 +282,14 @@ function epiloges_process() {
 				break;
 		}
 	}
-	$sql = "SELECT option_id, option_name, option_value, autoload, LENGTH(option_value) AS size FROM $ptab ORDER BY $orderby ASC";
-	$results = $wpdb->get_results($sql, ARRAY_A);
+	$query = sprintf("SELECT option_id, option_name, option_value, autoload, LENGTH(option_value) AS size FROM %s ORDER BY %s ASC", $wpdb->options, $orderby);
+	$results = $wpdb->get_results($query, ARRAY_A);
 	$rows = array();
 	foreach ($results as $row) {
 		$uop = true;
 		if (in_array($row['option_name'], $system_options) == false) {
 			foreach ($system_options as $op) {
-				if (strpos($row['option_name'], $op) !== false) {
+				if (strpos($row['option_name'], $op) <> false) {
 					$uop = false;
 					break;
 				}
@@ -310,17 +302,18 @@ function epiloges_process() {
 		}
 	}
 	$count = count($rows);
-	printf("<p><strong>Options marked in <span class=\"red\">red</span> have been identified as currently used by an installed plugin or theme and cannot be deleted.</strong></p>\n");
-	printf("<form method=\"post\" name=\"epiloges\" action=\"\">\n");
-	printf("<p>There were %s options found.</p>\n", $count);
-	printf("<table class=\"widefat\">\n");
-	printf("<thead>\n");
-	printf("<tr><th scope=\"col\" class=\"manage-column\"><a href=\"%s&orderby=name\" title=\"Sort on this column\">Option</a></th><th scope=\"col\" class=\"manage-column num\"><a href=\"%s&orderby=size\" title=\"Sort on this column\">Size</a></th><th scope=\"col\" class=\"manage-column num\"><a href=\"%s&orderby=autoload\" title=\"Sort on this column\">Autoload</th><th scope=\"col\" class=\"manage-column num\">Change Autoload</th><th scope=\"col\" class=\"manage-column num\">Delete</th></tr>\n", strtok($_SERVER['REQUEST_URI'], '&'),  strtok($_SERVER['REQUEST_URI'], '&'), strtok($_SERVER['REQUEST_URI'], '&'));
-	printf("</thead>\n");
-	printf("<tbody>\n");
+	$nonce = wp_create_nonce('epiloges_static_update');
+	echo sprintf("<p><strong>Options marked in <span class=\"red\">red</span> have been identified as currently used by an installed plugin or theme and cannot be deleted.</strong></p>\n");
+	echo sprintf("<form method=\"post\" name=\"epiloges\" action=\"\">\n");
+	echo sprintf("<input type=\"hidden\" name=\"epiloges_nonce\" value=\"%s\" />\n", $nonce);
+	echo sprintf("<p>There were %s options found.</p>\n", $count);
+	echo sprintf("<table class=\"widefat\">\n");
+	echo sprintf("<thead>\n");
+	echo sprintf("<tr><th scope=\"col\" class=\"manage-column\"><a href=\"%s&orderby=name\" title=\"Sort on this column\">Option</a></th><th scope=\"col\" class=\"manage-column num\"><a href=\"%s&orderby=size\" title=\"Sort on this column\">Size</a></th><th scope=\"col\" class=\"manage-column num\"><a href=\"%s&orderby=autoload\" title=\"Sort on this column\">Autoload</th><th scope=\"col\" class=\"manage-column num\">Change Autoload</th><th scope=\"col\" class=\"manage-column num\">Delete</th></tr>\n", strtok($_SERVER['REQUEST_URI'], '&'),  strtok($_SERVER['REQUEST_URI'], '&'), strtok($_SERVER['REQUEST_URI'], '&'));
+	echo sprintf("</thead>\n");
+	echo sprintf("<tbody>\n");
 	$abspath = str_replace('\\', '/', ABSPATH);
 	$class = 'alternate';
-	$prefixes = array();
 	$used = null;
 	foreach ($rows as $row) {
 		$option = $row['option_name'];
@@ -330,96 +323,68 @@ function epiloges_process() {
 		$size = epiloges_human_friendly_size($row['size']);
 		$path = isset($plugin_options[$option]) ? $plugin_options[$option] : null;
 		$au = $autoload == 'yes' ? 'no' : 'yes';
-		printf("<tr class=\"%s\">", $class);
+		echo sprintf("<tr class=\"%s\">", $class);
 		if (strlen($path) > 0) {
 			$path = $plugin_options[$option];
 			$used = $id;
 		}
-		if (strlen($path) > 0 || substr($option, 0, strlen($id) + 1) == $used . '_') {
-			printf("<td><strong class=\"red\" title=\"%s\">%s</strong></td>", str_replace($abspath, '/', $path), $option);
+		if (strlen($path) > 0 || substr($option, 0, strlen($id) + 1) == ($used . '_')) {
+			echo sprintf("<td><strong class=\"red\" title=\"%s\">%s</strong></td>", str_replace($abspath, '/', $path), $option);
 		} else {
-			printf("<td><a href=\"http://google.com/search?q=%s+wordpress&pws=0\" title=\"Google lookup\" target=\"_blank\">%s</a></td>", $option, $option);
-			if (strpos($option, '_')) {
-				$prefix = strtok($option, '_');
-				if (isset($prefixes[$prefix])) {
-					$prefixes[$prefix]++;
-				} else {
-					$prefixes[$prefix] = 1;
-				}
-			}
+			echo sprintf("<td><a href=\"http://google.com/search?q=%s+wordpress&pws=0\" title=\"Google lookup\" target=\"_blank\">%s</a></td>", $option, $option);
 		}
-		printf("<td class=\"num\"><span title=\"%s\">%s</span></td>", $value, $size);
-		printf("<td class=\"num\">%s</td>", $autoload);
-		printf("<td class=\"\"><span class=\"change\"><input type=\"checkbox\" value=\"%s_%s\" name=\"epiloges_autoload[]\">&nbsp;%s</span></td>", $au, $option, $au);
-		if (strlen($path) > 0 || substr($option, 0, strlen($id) + 1) == $used . '_') {
-			printf("<td class=\"num\">&nbsp;</td>");
+		echo sprintf("<td class=\"num\"><span title=\"%s\">%s</span></td>", $value, $size);
+		echo sprintf("<td class=\"num\">%s</td>", $autoload);
+		echo sprintf("<td class=\"\"><span class=\"change\"><input type=\"checkbox\" value=\"%s_%s\" name=\"epiloges_autoload[]\" />&nbsp;%s</span></td>", $au, $option, $au);
+		if (strlen($path) > 0 || substr($option, 0, strlen($id) + 1) == ($used . '_')) {
+			echo sprintf("<td class=\"num\">&nbsp;</td>");
 		} else {
-			printf("<td class=\"num\"><input type=\"checkbox\" value=\"%s\" name=\"epiloges_delete[]\"></td>", $option);
+			echo sprintf("<td class=\"num\"><input type=\"checkbox\" value=\"%s\" name=\"epiloges_delete[]\" /></td>", $option);
 		}
-		printf("</tr>\n");
+		echo sprintf("</tr>\n");
 		$class = strlen($class) > 0 ? null : 'alternate';
 	}
-	printf("</tbody>\n");
-	printf("</table>\n");
-	printf("<p class=\"submit\"><input class=\"button-primary\" value=\"Save Changes\" type=\"submit\" onclick=\"return confirm('Are you sure? There is no undo for this.');\"></p>\n");
-	printf("<input type=\"hidden\" name=\"epiloges_token\" value=\"%s\">\n", $nonce);
-	printf("</form>\n");
-	$info = null;
-	$c = 0;
-	foreach ($prefixes as $key => $value) {
-		if ($value > 1) {
-			$info = sprintf("%s\nDELETE FROM %s WHERE option_name LIKE '%s_%%';\n", $info, $ptab, $key);
-			$c++;
-		}
-	}
-	$info = trim($info);
-	printf("<p class=\"usage\">Current memory usage is %s, which peaked at %s.%s</p>", epiloges_human_friendly_size(memory_get_usage()), epiloges_human_friendly_size(memory_get_peak_usage()), $c > 0 ? ' <a href="#" id="epiloges-debug-toggle">Debug Info</a>' : null);
-	if (strlen($info) > 0) {
-		printf('<div id="epiloges-debug"><p><em>It may be quicker to do a wildcard delete of these %s prefixes using your favourite database tool instead:</em></p><pre>%s</pre></div>', $c, $info);
-	}
-	printf("</div>\n");
+	echo sprintf("</tbody>\n");
+	echo sprintf("</table>\n");
+	echo sprintf("<p class=\"submit\"><input class=\"button-primary\" value=\"Save Changes\" type=\"submit\" onclick=\"return confirm('Are you sure? There is no undo for this.');\" /></p>\n");
+	echo sprintf("</form>\n");
+	echo sprintf("<p>Current memory usage is %s, which peaked at %s.</p>", epiloges_human_friendly_size(memory_get_usage()), epiloges_human_friendly_size(memory_get_peak_usage()));
+	echo sprintf("</div>\n");
 }
-
 
 //
 // Add custom stylesheet to admin header.
 //
+add_filter('admin_head', 'epiloges_custom_stylesheet', 1);
 function epiloges_custom_stylesheet() {
-	if (strpos($_SERVER['QUERY_STRING'], 'page=epiloges') !== false) {
-		printf("<style>\n");
-		printf("#epiloges span.red, #epiloges strong.red {color:#c00}\n");
-		printf("#epiloges table th a, #epiloges table td a {color:#222;text-decoration:none}\n");
-		printf("#epiloges table th a {margin: 0 5px}\n");
-		printf("#epiloges table th a:hover, #epiloges table td a:hover {text-decoration:underline}\n");
-		printf("#epiloges table td span.change {padding-left:40%%}\n");
-		printf("#epiloges-help-toggle {padding-left:6px;font-size:90%%;text-transform:uppercase}\n");
-		printf("#epiloges-help {display:none}\n");
-		printf("#epiloges-debug-toggle {padding-left:6px;font-size:90%%;text-transform:uppercase}\n");
-		printf("#epiloges-debug {background:#fff;border:1px dotted #999;padding:5px 15px;margin:20px 0;line-height:1;display:none}\n");
-		printf("#epiloges-debug pre {padding:0 40px}\n");
-		printf("#epiloges p.usage {padding-top:10px}\n");
-		printf("</style>\n");
+	if (strpos($_SERVER['QUERY_STRING'], 'page=epiloges') <> false) {
+		echo sprintf("<style>\n");
+		echo sprintf("#epiloges span.red, #epiloges strong.red {color:#c00}\n");
+		echo sprintf("#epiloges table th a, #epiloges table td a {color:#222;text-decoration:none}\n");
+		echo sprintf("#epiloges table th a:hover, #epiloges table td a:hover {text-decoration:underline}\n");
+		echo sprintf("#epiloges table td span.change {padding-left:40%%}\n");
+		echo sprintf("#epiloges-help-toggle {padding-left:6px;font-size:85%%;text-transform:uppercase}\n");
+		echo sprintf("#epiloges-help {display:none}\n");
+		echo sprintf("</style>\n");
 	}
 }
-add_filter('admin_head', 'epiloges_custom_stylesheet', 1);
 
 //
 // Add plugin to dashboard tools menu.
 //
+add_filter('admin_menu', 'epiloges_init');
 function epiloges_init() {
 	add_management_page('Epiloges', 'Epiloges', 'manage_options', 'epiloges', 'epiloges_process');
 }
-add_filter('admin_menu', 'epiloges_init');
 
 //
 // Add help show/hide toggle to admin footer.
 //
-function epiloges_admin_jquery() {
-	printf("<script type=\"text/javascript\">\n");
-	printf("jQuery(document).ready(function(){jQuery('#epiloges-help-toggle').click(function(e){e.preventDefault();if(jQuery('#epiloges-help').is(':hidden')){jQuery('#epiloges-help').show();}else{jQuery('#epiloges-help').hide();}});});\n");
-	printf("jQuery(document).ready(function(){jQuery('#epiloges-debug-toggle').click(function(e){e.preventDefault();if(jQuery('#epiloges-debug').is(':hidden')){jQuery('#epiloges-debug').show();}else{jQuery('#epiloges-debug').hide();}});});\n");
-	printf("</script>\n");
-}
 add_filter('admin_footer', 'epiloges_admin_jquery');
+function epiloges_admin_jquery() {
+	echo sprintf("<script type=\"text/javascript\">\n");
+	echo sprintf("jQuery(document).ready(function(){jQuery('#epiloges-help-toggle').click(function(e){e.preventDefault();if(jQuery('#epiloges-help').is(':hidden')){jQuery('#epiloges-help').show();}else{jQuery('#epiloges-help').hide();}});});\n");
+	echo sprintf("</script>\n");
+}
 
 ?>
