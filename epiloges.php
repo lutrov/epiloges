@@ -5,7 +5,7 @@ Plugin Name: Epiloges
 Description: Optimises the Wordpress <em>options</em> table by allowing you to change plugin options so that they don't autoload and by allowing you to delete any orphaned options left behind by plugins and theme frameworks. Why this plugin name? Epiloges means "options" in Greek.
 Author: Ivan Lutrov
 Author URI: http://lutrov.com
-Version: 2.1
+Version: 2.2
 */
 
 defined('ABSPATH') || die('Ahem.');
@@ -93,7 +93,7 @@ function epiloges_process() {
 		die('Access denied.');
 	}
 	echo sprintf("<div id=\"epiloges\" class=\"wrap\">\n");
-	echo sprintf("<h2>Epiloges</h2>\n");
+	echo sprintf("<h1>Epiloges</h1>\n");
 	echo sprintf("<p>Epiloges Optimises the Wordpress <em>options</em> table by allowing you to change plugin options so that they don't autoload and by allowing you to delete any orphaned options left behind by plugins and theme frameworks. <a href=\"#\" id=\"epiloges-help-toggle\">Help</a></p>\n");
 	echo sprintf("<div id=\"epiloges-help\" style=\"display:none\">\n");
 	echo sprintf("<p>In Wordpress, some options are loaded whenever Wordpress loads a page. These are marked as autoload options. This is done to speed up Wordpress and prevent the programs from hitting the database every time some plugin needs to look up an option. Automatic loading of options at start-up makes Wordpress fast, but it can also use up memory for options that will seldom or never be used.</p>\n");
