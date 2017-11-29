@@ -3,9 +3,10 @@
 /*
 Plugin Name: Epiloges
 Description: Optimises the Wordpress <em>options</em> table by allowing you to change plugin options so that they don't autoload and by allowing you to delete any orphaned options left behind by plugins and theme frameworks. Why this plugin name? Epiloges means "options" in Greek.
+Plugin URI: https://github.com/lutrov/epiloges
+Version: 2.3
 Author: Ivan Lutrov
 Author URI: http://lutrov.com
-Version: 2.2
 */
 
 defined('ABSPATH') || die('Ahem.');
