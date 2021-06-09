@@ -1,5 +1,7 @@
 # Epiloges
 
+__Note: This plugin is probably not compatible with Wordpress 5.__
+
 Optimises the Wordpress _options_ table by allowing you to change plugin options so that they don't autoload and by allowing you to delete any orphaned options left behind by plugins and theme frameworks. Why this plugin name? Epiloges means "options" in Greek.
 
 ## Copyright and License
